@@ -10,6 +10,27 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${url}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export interface GenerateResult {
+  images: { url: string; width: number; height: number }[];
+}
+
+export async function generateRoom(imageBase64: string): Promise<GenerateResult> {
+  return postJSON('/generate-room', { image: imageBase64 });
+}
+
 /**
  * Build a full URL for a GLB asset served by the backend.
  * The glbPath comes from the module API (e.g. "Каталог Рояль Мебелей/С - Нижние модули/С 300.glb").

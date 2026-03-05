@@ -12,6 +12,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useCatalogStore } from './store/useCatalogStore';
 import { useKitchenPlan } from './hooks/useKitchenPlan';
 import { useUrlState } from './hooks/useUrlState';
+import { generateRoom } from './api/client';
 
 type ViewTab = '3d' | 'diagram' | 'modules' | 'debug';
 
@@ -37,6 +38,11 @@ export default function App() {
   const selectCatalog = useCatalogStore((s) => s.selectCatalog);
   const viewerRef = useRef<HTMLCanvasElement | null>(null);
 
+  // AI generation state
+  const [genState, setGenState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [genImageUrl, setGenImageUrl] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+
   // URL state sync
   useUrlState();
 
@@ -51,18 +57,43 @@ export default function App() {
     downloadJSON(plan, `kitchen-plan-${Date.now()}.json`);
   }, [plan]);
 
-  const handleExportScreenshot = useCallback(() => {
+  const handleExportScreenshot = useCallback(async () => {
     const canvas = viewerRef.current;
     if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `kitchen-3d-${Date.now()}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+
+    const dataUri = canvas.toDataURL('image/png');
+
+    setGenState('loading');
+    setGenImageUrl(null);
+    setGenError(null);
+
+    try {
+      const result = await generateRoom(dataUri);
+      if (result.images?.[0]?.url) {
+        setGenImageUrl(result.images[0].url);
+        setGenState('done');
+      } else {
+        throw new Error('No image returned');
+      }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Generation failed');
+      setGenState('error');
+    }
+  }, []);
+
+  const handleDownloadGenerated = useCallback(() => {
+    if (!genImageUrl) return;
+    const a = document.createElement('a');
+    a.href = genImageUrl;
+    a.download = `kitchen-realistic-${Date.now()}.png`;
+    a.target = '_blank';
+    a.click();
+  }, [genImageUrl]);
+
+  const handleCloseModal = useCallback(() => {
+    setGenState('idle');
+    setGenImageUrl(null);
+    setGenError(null);
   }, []);
 
   return (
@@ -272,6 +303,98 @@ export default function App() {
               )}
             </div>
           </main>
+        </div>
+      )}
+
+      {/* ─── AI Generation Modal ─── */}
+      {genState !== 'idle' && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && genState !== 'loading') handleCloseModal();
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-primary-100">
+              <h2 className="text-sm font-bold text-primary-900">
+                {genState === 'loading' && 'Generating Photorealistic Kitchen...'}
+                {genState === 'done' && 'Photorealistic Kitchen'}
+                {genState === 'error' && 'Generation Failed'}
+              </h2>
+              {genState !== 'loading' && (
+                <button
+                  onClick={handleCloseModal}
+                  className="text-primary-400 hover:text-primary-700 text-lg leading-none"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {/* Modal body */}
+            <div className="flex-1 overflow-auto p-6 flex items-center justify-center">
+              {genState === 'loading' && (
+                <div className="text-center py-16">
+                  <div className="w-12 h-12 border-3 border-primary-200 border-t-accent-600 rounded-full animate-spin mx-auto mb-5" />
+                  <p className="text-sm text-primary-600 font-medium mb-1">
+                    AI is transforming your kitchen...
+                  </p>
+                  <p className="text-xs text-primary-400">
+                    This may take 15–30 seconds
+                  </p>
+                </div>
+              )}
+
+              {genState === 'done' && genImageUrl && (
+                <img
+                  src={genImageUrl}
+                  alt="AI-generated photorealistic kitchen"
+                  className="max-w-full max-h-[65vh] rounded-lg shadow-lg object-contain"
+                />
+              )}
+
+              {genState === 'error' && (
+                <div className="text-center py-12">
+                  <div className="text-4xl mb-4">!</div>
+                  <p className="text-sm text-red-600 font-medium mb-2">
+                    {genError || 'Something went wrong'}
+                  </p>
+                  <p className="text-xs text-primary-400 mb-4">
+                    Please try again
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            {genState !== 'loading' && (
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-primary-100">
+                {genState === 'error' && (
+                  <button
+                    onClick={handleExportScreenshot}
+                    className="px-4 py-2 text-xs font-semibold bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+                {genState === 'done' && (
+                  <button
+                    onClick={handleDownloadGenerated}
+                    className="px-4 py-2 text-xs font-semibold bg-accent-600 text-white rounded-lg hover:bg-accent-700 transition-colors"
+                  >
+                    Download PNG
+                  </button>
+                )}
+                <button
+                  onClick={handleCloseModal}
+                  className="px-4 py-2 text-xs font-semibold text-primary-500 hover:bg-primary-100 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
