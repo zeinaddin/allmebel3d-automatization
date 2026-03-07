@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { CatalogBrowser } from './components/catalog/CatalogBrowser';
 import { LayoutSelector } from './components/configurator/LayoutSelector';
 import { WallInput } from './components/configurator/WallInput';
@@ -37,6 +38,7 @@ export default function App() {
   const selectedCatalogId = useCatalogStore((s) => s.selectedCatalogId);
   const selectCatalog = useCatalogStore((s) => s.selectCatalog);
   const viewerRef = useRef<HTMLCanvasElement | null>(null);
+  const forceRenderRef = useRef<(() => void) | null>(null);
 
   // AI generation state
   const [genState, setGenState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -61,6 +63,8 @@ export default function App() {
     const canvas = viewerRef.current;
     if (!canvas) return;
 
+    // Force a synchronous render so the buffer contains the current frame
+    forceRenderRef.current?.();
     const dataUri = canvas.toDataURL('image/png');
 
     setGenState('loading');
@@ -167,6 +171,12 @@ export default function App() {
               </span>
             </>
           )}
+          <Link
+            to="/admin"
+            className="text-xs text-primary-400 hover:text-primary-600 transition-colors ml-2"
+          >
+            Админ
+          </Link>
         </div>
       </header>
 
@@ -268,7 +278,13 @@ export default function App() {
               {!loading && !error && plan && (
                 <ErrorBoundary>
                   {viewTab === '3d' && (
-                    <KitchenViewer plan={plan} canvasRef={viewerRef} />
+                    <KitchenViewer
+                      plan={plan}
+                      canvasRef={viewerRef}
+                      onSceneReady={({ forceRender }) => {
+                        forceRenderRef.current = forceRender;
+                      }}
+                    />
                   )}
 
                   {viewTab === 'diagram' && (

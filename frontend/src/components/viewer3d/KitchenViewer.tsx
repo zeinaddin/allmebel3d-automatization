@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { createScene } from './sceneBuilder';
-import type { PlacedMod, SceneConfig } from './sceneBuilder';
+import type { PlacedMod, SceneConfig, SceneHandle } from './sceneBuilder';
 import type { KitchenPlan } from '../../algorithm/types';
 import type { Module } from '../../api/types';
 import { getAssetUrl } from '../../api/client';
@@ -72,12 +72,13 @@ function flattenPlan(plan: KitchenPlan, wallId: string): PlacedMod[] {
 interface KitchenViewerProps {
   plan: KitchenPlan;
   canvasRef?: React.MutableRefObject<HTMLCanvasElement | null>;
+  onSceneReady?: (handle: { forceRender: () => void }) => void;
 }
 
-export function KitchenViewer({ plan, canvasRef: externalRef }: KitchenViewerProps) {
+export function KitchenViewer({ plan, canvasRef: externalRef, onSceneReady }: KitchenViewerProps) {
   const internalRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = externalRef ?? internalRef;
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const sceneHandleRef = useRef<SceneHandle | null>(null);
   const allModules = useCatalogStore((s) => s.modules);
   const store = useKitchenStore();
 
@@ -97,9 +98,9 @@ export function KitchenViewer({ plan, canvasRef: externalRef }: KitchenViewerPro
     if (!canvas) return;
 
     // Cleanup previous scene
-    if (cleanupRef.current) {
-      cleanupRef.current();
-      cleanupRef.current = null;
+    if (sceneHandleRef.current) {
+      sceneHandleRef.current.cleanup();
+      sceneHandleRef.current = null;
     }
 
     const lowerMods = flattenPlan(plan, 'wall-a');
@@ -120,12 +121,14 @@ export function KitchenViewer({ plan, canvasRef: externalRef }: KitchenViewerPro
       cornerGlbUrl,
     };
 
-    cleanupRef.current = createScene(canvas, config);
+    const handle = createScene(canvas, config);
+    sceneHandleRef.current = handle;
+    onSceneReady?.({ forceRender: handle.forceRender });
 
     return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current();
-        cleanupRef.current = null;
+      if (sceneHandleRef.current) {
+        sceneHandleRef.current.cleanup();
+        sceneHandleRef.current = null;
       }
     };
   }, [plan, allModules, isL, store.wallALength, store.wallBLength, store.cornerWidth, cornerCode, cornerGlbUrl]);

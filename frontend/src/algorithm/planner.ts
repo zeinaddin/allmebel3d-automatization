@@ -12,7 +12,13 @@ import { segmentWall } from './segmenter';
 import { findWithFillers } from './solver';
 import { scoreCombo } from './scorer';
 import type { GoldenRule } from './goldenTable';
-import { lookupGolden, resolveGoldenModules } from './goldenTable';
+import {
+  lookupGolden,
+  resolveGoldenModules,
+  mergeRules,
+  validateResult,
+  DEFAULT_GOLDEN_RULES,
+} from './goldenTable';
 
 interface ModulePool {
   /** Standard + drawer + combo modules for filling segments */
@@ -47,17 +53,21 @@ export function buildModulePool(modules: Module[]): ModulePool {
 }
 
 /**
- * Solve a single fill segment: find the best module combination.
- * Checks golden table first, then falls back to backtracking.
+ * Hybrid solver for a fill segment:
+ *   Layer 1   — exact golden table match
+ *   Layer 1.5 — golden table + filler (subtract 150 or 200, re-lookup)
+ *   Layer 2   — backtracking fallback
+ *
+ * Every result is validated.
  */
 function solveSegment(
   segment: Segment,
   pool: ModulePool,
   allModules: Module[],
-  goldenRules: GoldenRule[],
+  mergedRules: GoldenRule[],
 ): SolvedSegment {
-  // 1. Check golden table first
-  const goldenRule = lookupGolden(segment.context, segment.width, goldenRules);
+  // ─── Layer 1: Exact golden table match ───
+  const goldenRule = lookupGolden(segment.context, segment.width, mergedRules);
   if (goldenRule) {
     const resolved = resolveGoldenModules(goldenRule, allModules);
     if (resolved) {
@@ -67,11 +77,39 @@ function solveSegment(
         score: scoreCombo(resolved, segment.context),
         method: 'golden_table',
         alternatives: [],
+        validation: validateResult(resolved, segment.width, segment.context),
       };
     }
   }
 
-  // 2. Fall back to backtracking
+  // ─── Layer 1.5: Golden table + filler ───
+  for (const fillerWidth of [150, 200] as const) {
+    const reducedWidth = segment.width - fillerWidth;
+    if (reducedWidth < 300) continue;
+
+    const rule = lookupGolden(segment.context, reducedWidth, mergedRules);
+    if (!rule) continue;
+
+    const resolved = resolveGoldenModules(rule, allModules);
+    if (!resolved) continue;
+
+    const fillerMod = allModules.find(
+      (m) => m.code === 'СБ' && m.width === fillerWidth,
+    );
+    if (!fillerMod) continue;
+
+    const mods = [...resolved, fillerMod];
+    return {
+      ...segment,
+      modules: mods,
+      score: scoreCombo(mods, segment.context),
+      method: 'golden_table+filler',
+      alternatives: [],
+      validation: validateResult(mods, segment.width, segment.context),
+    };
+  }
+
+  // ─── Layer 2: Backtracking fallback ───
   const candidates = pool.fillCandidates;
   if (candidates.length === 0) {
     return {
@@ -80,6 +118,7 @@ function solveSegment(
       score: 0,
       method: 'no_solution',
       alternatives: [],
+      validation: validateResult([], segment.width, segment.context),
       error: 'Нет доступных нижних модулей для заполнения из backend-каталога',
     };
   }
@@ -97,6 +136,7 @@ function solveSegment(
       score: 0,
       method: 'no_solution',
       alternatives: [],
+      validation: validateResult([], segment.width, segment.context),
       error: `Не удалось заполнить ${segment.width} мм`,
     };
   }
@@ -117,6 +157,7 @@ function solveSegment(
     score: best.score,
     method: fillers.length > 0 ? 'backtracking+filler' : 'backtracking',
     alternatives: scored.slice(1, 6),
+    validation: validateResult(best.modules, segment.width, segment.context),
   };
 }
 
@@ -165,6 +206,8 @@ function solveAnchor(
         annotations: [],
         glbPath: '',
         categoryDir: '',
+        price: 0,
+        description: null,
       };
     }
   }
@@ -185,7 +228,7 @@ function planWall(
   wall: Wall,
   pool: ModulePool,
   allModules: Module[],
-  goldenRules: GoldenRule[],
+  mergedRules: GoldenRule[],
 ): WallPlan {
   const segments = segmentWall(wall);
 
@@ -193,7 +236,7 @@ function planWall(
     if (seg.kind === 'anchor') {
       return solveAnchor(seg, pool);
     }
-    return solveSegment(seg, pool, allModules, goldenRules);
+    return solveSegment(seg, pool, allModules, mergedRules);
   });
 
   const scores = solved.filter((s) => s.kind === 'fill').map((s) => s.score);
@@ -212,7 +255,7 @@ function planWall(
 
 /**
  * Main entry point: plan the entire kitchen.
- * Golden rules are checked before backtracking for each fill segment.
+ * Merges user golden rules with defaults, then solves each wall.
  */
 export function planKitchen(
   config: KitchenConfig,
@@ -220,14 +263,15 @@ export function planKitchen(
   goldenRules: GoldenRule[] = [],
 ): KitchenPlan {
   const pool = buildModulePool(modules);
+  const mergedRules = mergeRules(goldenRules, DEFAULT_GOLDEN_RULES);
   const wallPlans: WallPlan[] = [];
 
   // Wall A
-  wallPlans.push(planWall(config.wallA, pool, modules, goldenRules));
+  wallPlans.push(planWall(config.wallA, pool, modules, mergedRules));
 
   // Wall B (L-shaped)
   if (config.layout === 'l-shaped' && config.wallB) {
-    wallPlans.push(planWall(config.wallB, pool, modules, goldenRules));
+    wallPlans.push(planWall(config.wallB, pool, modules, mergedRules));
   }
 
   const overallScore =

@@ -22,8 +22,9 @@ export interface Segment {
 export interface SolvedSegment extends Segment {
   modules: Module[];
   score: number;
-  method: 'anchor' | 'backtracking' | 'backtracking+filler' | 'golden_table' | 'no_solution';
+  method: 'anchor' | 'backtracking' | 'backtracking+filler' | 'golden_table' | 'golden_table+filler' | 'no_solution';
   alternatives: ScoredCombo[];
+  validation?: { valid: boolean; errors: string[] };
   error?: string;
 }
 

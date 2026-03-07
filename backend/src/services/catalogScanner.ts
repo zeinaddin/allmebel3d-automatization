@@ -75,6 +75,8 @@ function scanCatalog(catalogDir: string, catalogName: string, assetsRoot: string
       annotations: parsed.annotations,
       glbPath: relPath,
       categoryDir,
+      price: 0,
+      description: null,
     });
   }
 

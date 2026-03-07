@@ -105,11 +105,22 @@ function fitModel(
   const hM = targetH * S;
   const dM = targetD * S;
 
-  model.scale.set(wM / size.x, hM / size.y, dM / size.z);
+  // Scale X (width) and Z (depth) to match target exactly so cabinets
+  // align side-by-side and against the wall.
+  // Scale Y proportionally to X so models with protruding parts
+  // (faucets, handles) keep correct proportions instead of being compressed.
+  const scaleX = wM / size.x;
+  const scaleZ = dM / size.z;
+  const scaleY = scaleX; // proportional to width — prevents height distortion
 
-  // Recompute bounds after scaling and center the model at origin
+  model.scale.set(scaleX, scaleY, scaleZ);
+
+  // Recompute bounds after scaling
   const scaledBox = new THREE.Box3().setFromObject(model);
   const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+  const scaledMin = scaledBox.min;
+
+  // Center model at wrapper origin
   model.position.sub(scaledCenter);
 
   // Enable shadows on all meshes
@@ -123,7 +134,12 @@ function fitModel(
   const wrapper = new THREE.Group();
   wrapper.add(model);
   wrapper.rotation.y = rotY;
-  wrapper.position.set(cx, cy, cz);
+
+  // Align model bottom to target slot bottom (plinth top),
+  // keep X/Z at the target center
+  const targetBottomY = cy - hM / 2;
+  const modelHalfH = scaledCenter.y - scaledMin.y;
+  wrapper.position.set(cx, targetBottomY + modelHalfH, cz);
 
   return wrapper;
 }
@@ -300,10 +316,15 @@ function createStoveBurners(x: number, w: number): THREE.Group {
   return group;
 }
 
+export interface SceneHandle {
+  cleanup: () => void;
+  forceRender: () => void;
+}
+
 export function createScene(
   canvas: HTMLCanvasElement,
   config: SceneConfig,
-): () => void {
+): SceneHandle {
   const { wallMm, lowerMods, upperMods, isL, wallBMm, cornerW, lowerModsB, upperModsB, cornerCode, cornerGlbUrl } =
     config;
 
@@ -325,6 +346,7 @@ export function createScene(
     canvas,
     antialias: true,
     alpha: false,
+    preserveDrawingBuffer: true,
   });
   renderer.setSize(W, H);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -589,7 +611,7 @@ export function createScene(
     tryLoadGLB(
       scene, cabinetGroup, mod.glbUrl,
       mod.width, cabinetH, LOWER_D, cx, cy, cz, disposed,
-      0,
+      Math.PI,
       extraDetails.length > 0 ? extraDetails : undefined,
       requestRender,
     );
@@ -673,7 +695,7 @@ export function createScene(
       scene.add(label);
     }
 
-    tryLoadGLB(scene, cabinetGroup, mod.glbUrl, mod.width, UPPER_H, UPPER_D, cx, cy, cz, disposed, 0, undefined, requestRender);
+    tryLoadGLB(scene, cabinetGroup, mod.glbUrl, mod.width, UPPER_H, UPPER_D, cx, cy, cz, disposed, Math.PI, undefined, requestRender);
   }
 
   // ─── Under-cabinet lighting (Wall A) — max 3 lights ───
@@ -715,7 +737,7 @@ export function createScene(
         scene, cornerCabinet, cornerGlbUrl,
         cornerW, cornerH, cornerW,
         cornerCx, cornerCy, cornerCz, disposed,
-        0, undefined, requestRender,
+        Math.PI, undefined, requestRender,
       );
     }
 
@@ -758,12 +780,12 @@ export function createScene(
         scene.add(label);
       }
 
-      // GLB for Wall B: load normal orientation, then rotate -90°
+      // GLB for Wall B: load normal orientation, then rotate +90° (180° flip + -90° wall rotation)
       tryLoadGLB(
         scene, cabinetGroup, mod.glbUrl,
         mod.width, cabinetH, LOWER_D,
         bCx, bCy, bCz, disposed,
-        -Math.PI / 2, undefined, requestRender,
+        Math.PI / 2, undefined, requestRender,
       );
 
       // Plinth
@@ -852,7 +874,7 @@ export function createScene(
         scene, cabinetGroup, mod.glbUrl,
         mod.width, UPPER_H, UPPER_D,
         bCx, bCy, bCz, disposed,
-        -Math.PI / 2, undefined, requestRender,
+        Math.PI / 2, undefined, requestRender,
       );
 
       curBUpper += mod.width;
@@ -956,8 +978,13 @@ export function createScene(
   };
   window.addEventListener('resize', onResize);
 
+  // ─── Force render (for screenshot capture) ───
+  function forceRender() {
+    renderer.render(scene, cam);
+  }
+
   // ─── Cleanup ───
-  return () => {
+  const cleanup = () => {
     disposed.current = true;
     cancelAnimationFrame(frameId);
     clearTimeout(glbTimer);
@@ -1001,4 +1028,6 @@ export function createScene(
     // Clear scene environment
     scene.environment = null;
   };
+
+  return { cleanup, forceRender };
 }

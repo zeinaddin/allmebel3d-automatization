@@ -33,10 +33,14 @@ export async function generateRoom(imageBase64: string): Promise<GenerateResult>
 
 /**
  * Build a full URL for a GLB asset served by the backend.
- * The glbPath comes from the module API (e.g. "Каталог Рояль Мебелей/С - Нижние модули/С 300.glb").
- * Each path segment is URI-encoded to handle Cyrillic + spaces.
+ * Handles both legacy filesystem paths and new /uploads/ paths.
  */
 export function getAssetUrl(glbPath: string): string {
+  // New upload-based paths already start with /uploads/
+  if (glbPath.startsWith('/uploads/') || glbPath.startsWith('http')) {
+    return glbPath;
+  }
+  // Legacy filesystem-based paths
   return ASSETS_BASE + '/' + glbPath.split('/').map(encodeURIComponent).join('/');
 }
 

@@ -30,6 +30,8 @@ export interface Module {
   annotations: string[];
   glbPath: string;
   categoryDir: string;
+  price: number;
+  description: string | null;
 }
 
 export interface Catalog {

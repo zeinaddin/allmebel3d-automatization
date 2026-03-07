@@ -28,10 +28,11 @@ export function createGenerateRouter(): Router {
         },
         body: JSON.stringify({
           prompt:
-            'Transform this 3D kitchen render into a photorealistic kitchen photograph. ' +
-            'Keep the exact same layout, cabinet positions, appliances, and wall configuration. ' +
-            'Add realistic materials, natural lighting, shadows, reflections, wood textures, ' +
-            'marble countertops, and make it look like a professional interior design photo.',
+            'Make this kitchen interior photorealistic. ' +
+            'Keep all cabinets, oven, sink, countertop, and appliances exactly in their current positions — do not add, remove, or move any furniture. ' +
+            'Apply realistic wood grain textures to the floor, realistic paint to walls, realistic material finishes to cabinet doors. ' +
+            'Add soft natural window lighting, subtle ambient occlusion shadows, and gentle reflections on the countertop surface. ' +
+            'The result should look like a real interior design photograph taken with a wide-angle lens.',
           image_urls: [image],
           num_images: 1,
           aspect_ratio: 'auto',

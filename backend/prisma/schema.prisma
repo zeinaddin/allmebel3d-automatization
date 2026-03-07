@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        Int       @id @default(autoincrement())
+  name      String
+  catalogs  Catalog[]
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("companies")
+}
+
+model Catalog {
+  id        Int       @id @default(autoincrement())
+  name      String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId Int       @map("company_id")
+  assets    Asset[]
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("catalogs")
+}
+
+model Asset {
+  id          Int      @id @default(autoincrement())
+  catalog     Catalog  @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  catalogId   Int      @map("catalog_id")
+  name        String
+  code        String
+  width       Int
+  tier        String
+  subtype     String
+  isCorner    Boolean  @default(false) @map("is_corner")
+  glbUrl      String   @map("glb_url")
+  price       Decimal  @default(0) @db.Decimal(10, 2)
+  description String?
+  annotations Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("assets")
+}

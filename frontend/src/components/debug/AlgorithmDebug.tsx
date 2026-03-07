@@ -1,8 +1,9 @@
 import type { KitchenPlan, SolvedSegment, SegmentContext } from '../../algorithm/types';
 
 const METHOD_STYLES: Record<string, { label: string; bg: string; text: string }> = {
-  golden_table:         { label: 'ТАБЛИЦА',           bg: 'bg-purple-100', text: 'text-purple-700' },
-  anchor:               { label: 'ЯКОРЬ',             bg: 'bg-blue-100',   text: 'text-blue-700' },
+  golden_table:           { label: 'ТАБЛИЦА',           bg: 'bg-purple-100', text: 'text-purple-700' },
+  'golden_table+filler': { label: 'ТАБЛИЦА+ФИЛЛЕР',   bg: 'bg-violet-100', text: 'text-violet-700' },
+  anchor:                { label: 'ЯКОРЬ',             bg: 'bg-blue-100',   text: 'text-blue-700' },
   backtracking:         { label: 'АЛГОРИТМ',          bg: 'bg-green-100',  text: 'text-green-700' },
   'backtracking+filler': { label: 'АЛГОРИТМ+ФИЛЛЕР', bg: 'bg-amber-100',  text: 'text-amber-700' },
   no_solution:          { label: 'НЕТ РЕШЕНИЯ',       bg: 'bg-red-100',    text: 'text-red-700' },
@@ -80,6 +81,15 @@ function SegmentRow({ segment, index }: { segment: SolvedSegment; index: number 
               )}
             </div>
           </details>
+        </div>
+      )}
+
+      {/* Validation errors */}
+      {segment.validation && !segment.validation.valid && (
+        <div className="px-3 pb-2">
+          {segment.validation.errors.map((err, j) => (
+            <span key={j} className="text-xs text-orange-500 block">{err}</span>
+          ))}
         </div>
       )}
 
